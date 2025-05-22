@@ -1,0 +1,16 @@
+{
+  "name": "syntegration-ai",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "index.js",
+  "scripts": {
+    "start": "dotenv node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "author": "",
+  "license": "MIT",
+  "description": "",
+  "devDependencies": {
+    "dotenv-cli": "^8.0.0"
+  }
+}
