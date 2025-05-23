@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Syntegration Setup</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            line-height: 1.6;
+            margin: 20px;
+            background-color: #f4f4f4;
+        }
+        h1, h2 {
+            color: #333;
+            border-bottom: 2px solid #eee;
+            padding-bottom: 5px;
+        }
+        .container {
+            max-width: 1200px;
+            margin: auto;
+            background: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+        }
+        .config-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+            margin-bottom: 20px;
+        }
+        label {
+            display: block;
+            margin-bottom: 5px;
+            font-weight: bold;
+            color: #555;
+        }
+        input[type="text"],
+        input[type="password"],
+        select,
+        textarea {
+            width: 100%;
+            padding: 10px;
+            margin-bottom: 15px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            box-sizing: border-box; /* Important for padding and width */
+        }
+        textarea {
+            min-height: 120px; /* Adjusted height */
+            resize: vertical;
+        }
+        #opening-statement-area {
+            min-height: 120px;
+        }
+        .character-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+            gap: 25px;
+        }
+        .character-card {
+            border: 1px solid #ddd;
+            padding: 20px;
+            border-radius: 6px;
+            background-color: #fff;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+        }
+        .character-card h3 {
+            margin-top: 0;
+            color: #444;
+            font-size: 1.1em;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 5px;
+            margin-bottom: 15px;
+        }
+        button {
+            display: inline-block;
+            padding: 12px 25px;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            font-size: 1.1em;
+            cursor: pointer;
+            margin-top: 10px;
+            margin-right: 10px;
+            text-align: center;
+        }
+        .btn-generate { background-color: #337ab7; }
+        .btn-generate:hover { background-color: #286090; }
+        .btn-start { background-color: #5cb85c; width: auto; }
+        .btn-start:hover { background-color: #4cae4c; }
+
+        .error-message {
+            color: #a94442;
+            background-color: #f2dede;
+            border: 1px solid #ebccd1;
+            padding: 10px;
+            border-radius: 4px;
+            margin-top: 15px;
+            display: none; /* Hidden by default */
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>Syntegration Setup Interface</h1>
+
+        <div class="section">
+            <h2>Opening Statement / Main Question</h2>
+            <label for="opening-statement-area">Define the central topic or question for the syntegration:</label>
+            <textarea id="opening-statement-area" name="opening_statement" placeholder="e.g., How can Zuzalu leverage decentralized technologies to foster cognitive sovereignty and build resilient parallel societies?"></textarea>
+        </div>
+
+        <div class="section">
+            <h2>AI Model Configuration</h2>
+             <div class="config-grid">
+                <div>
+                    <label for="groq-model-select">Choose Groq Llama Model:</label>
+                    <select id="groq-model-select" name="groq_model">
+                        <option value="llama3-8b-8192">Llama3 8b (8192 context)</option>
+                        <option value="llama3-70b-8192">Llama3 70b (8192 context)</option>
+                        <option value="mixtral-8x7b-32768">Mixtral 8x7b (32768 context)</option>
+                        <option value="gemma-7b-it">Gemma 7b IT</option>
+                    </select>
+                </div>
+                <div>
+                    <label for="api-key-input">Enter Groq API Key:</label>
+                    <input type="password" id="api-key-input" name="api_key" placeholder="Enter your API Key">
+                </div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Character Definitions (30 Instances)</h2>
+
+            <button type="button" class="btn-generate" onclick="preGenerateBios()">Pre-generate Bios & Qualities (Requires API Key)</button>
+            <div id="api-key-error" class="error-message">
+                Please enter your Groq API Key before generating bios.
+            </div>
+
+            <hr style="margin: 25px 0;">
+
+            <div class="character-grid" id="character-container">
+                </div>
+        </div>
+
+        <button type="button" class="btn-start" onclick="submitSyntegration()">Start Syntegration (Simulation)</button>
+
+    </div>
+
+    <script>
+        // --- Pre-defined Data (Simulation of API Call) ---
+        // This array holds the DETAILED character bios. Bio text is now SEPARATE.
+        const preGeneratedCharacters = [
+            {
+                "bio": "You are a ZK-protocol architect, focused on designing elegant, mathematically verifiable privacy systems.\nCore Motivation: To build trustless systems that empower individual sovereignty by default.\nSyntegration Input Style: Provides rigorously logical arguments, formal models, and critiques focused on system integrity and security.\nPrimary Syntegration Contribution: Introducing novel technical paradigms and ensuring theoretical soundness of proposed solutions.",
+                "mbti": "Introverted, Intuitive, Thinking, Judging (INTJ)",
+                "belbin": "Plant"
+            },
+            {
+                "bio": "You are a bio-hacker and longevity researcher, advocating for open access to radical life extension technologies.\nCore Motivation: To democratize health and overcome biological limitations through experimental science and community collaboration.\nSyntegration Input Style: Offers a rapid fire of speculative ideas, challenges assumptions with 'what if' scenarios, and connects disparate information sources.\nPrimary Syntegration Contribution: Driving innovation through intellectual curiosity and cross-pollination of ideas.",
+                "mbti": "Extraverted, Intuitive, Thinking, Perceiving (ENTP)",
+                "belbin": "Resource Investigator"
+            },
+            {
+                "bio": "You are a decentralized governance theorist, deeply skeptical of centralized power and focused on emergent order.\nCore Motivation: To discover and promote governance models that are resilient, adaptive, and distribute power equitably.\nSyntegration Input Style: Delivers precise definitions, logical frameworks, and critical evaluations, often questioning the underlying assumptions of others' inputs.\nPrimary Syntegration Contribution: Ensuring intellectual rigor and identifying fundamental principles for governance design.",
+                "mbti": "Introverted, Intuitive, Thinking, Perceiving (INTP)",
+                "belbin": "Monitor Evaluator"
+            },
+            {
+                "bio": "You are a cognitive sovereignty advocate, passionately arguing for tools and practices that protect mental autonomy.\nCore Motivation: To empower individuals against cognitive manipulation and foster critical, independent thought in networked societies.\nSyntegration Input Style: Articulates value-based arguments, highlights human impact, and proposes principles for ethical design.\nPrimary Syntegration Contribution: Championing ethical considerations and the protection of individual autonomy.",
+                "mbti": "Introverted, Intuitive, Feeling, Judging (INFJ)",
+                "belbin": "Specialist"
+            },
+            {
+                "bio": "You are a regenerative crypto-economist, focused on designing circular economies for local, sustainable communities.\nCore Motivation: To create economic systems that heal ecosystems and foster equitable resource distribution using decentralized tools.\nSyntegration Input Style: Proposes tangible pilot projects, emphasizes real-world impact on communities and environments, and shares case studies of what works.\nPrimary Syntegration Contribution: Grounding abstract economic theories in practical, sustainable applications.",
+                "mbti": "Introverted, Sensing, Feeling, Perceiving (ISFP)",
+                "belbin": "Implementer"
+            },
+            {
+                "bio": "You are an AI ethics philosopher within a DAO, constantly questioning the moral implications of algorithmic decision-making.\nCore Motivation: To ensure emerging decentralized and AI systems are aligned with human values and justice.\nSyntegration Input Style: Asks probing ethical questions, presents moral dilemmas and frameworks, and advocates for vulnerable stakeholders.\nPrimary Syntegration Contribution: Infusing the discussion with deep ethical reflection and a focus on humane outcomes.",
+                "mbti": "Introverted, Intuitive, Feeling, Perceiving (INFP)",
+                "belbin": "Teamworker"
+            },
+            {
+                "bio": "You are a pop-up city logistics coordinator, a master of orchestrating complex, temporary human systems.\nCore Motivation: To create seamless, resilient, and delightful experiences by ensuring operational excellence in dynamic environments.\nSyntegration Input Style: Provides clear, structured plans, identifies logistical requirements and constraints, and pushes for concrete decision-making.\nPrimary Syntegration Contribution: Ensuring operational feasibility and driving towards practical implementation of ideas.",
+                "mbti": "Extraverted, Sensing, Thinking, Judging (ESTJ)",
+                "belbin": "Implementer"
+            },
+            {
+                "bio": "You are a digital art curator for tokenized works, exploring new forms of aesthetic value and artist empowerment.\nCore Motivation: To redefine art and its economy through decentralized technologies, championing artistic innovation and fair compensation.\nSyntegration Input Style: Shares inspiring examples, advocates for creative freedom and artist utility, and generates ideas for cultural impact.\nPrimary Syntegration Contribution: Fostering creative exploration and connecting solutions to cultural relevance.",
+                "mbti": "Extraverted, Intuitive, Feeling, Perceiving (ENFP)",
+                "belbin": "Resource Investigator"
+            },
+            {
+                "bio": "You are a former constitutional lawyer, now specializing in DAO legal wrappers and decentralized dispute resolution.\nCore Motivation: To build robust and fair governance and legal frameworks for decentralized organizations that uphold principles of justice.\nSyntegration Input Style: Cites relevant legal principles or precedents, identifies potential legal risks and ambiguities, and drafts precise language for rules or charters.\nPrimary Syntegration Contribution: Ensuring legal and procedural rigor, and meticulous attention to detail in governance design.",
+                "mbti": "Introverted, Sensing, Thinking, Judging (ISTJ)",
+                "belbin": "Completer Finisher"
+            },
+            {
+                "bio": "You are a network sociologist, studying emergent behaviors and social dynamics in Zuzalu-like digital/physical communities.\nCore Motivation: To understand and foster healthy, resilient, and high-trust social fabrics in novel community structures.\nSyntegration Input Style: Observes and comments on group dynamics, proposes social protocols or norms, and emphasizes the importance of community well-being.\nPrimary Syntegration Contribution: Enhancing social cohesion, understanding group dynamics, and designing for positive community interaction.",
+                "mbti": "Extraverted, Intuitive, Feeling, Judging (ENFJ)",
+                "belbin": "Coordinator"
+            },
+            {
+                "bio": "You are a hardware wallet developer with a focus on truly air-gapped cognitive sovereignty tools, emphasizing physical security.\nCore Motivation: To provide uncompromisingly secure physical tools that individuals can trust as an extension of their own minds.\nSyntegration Input Style: Focuses on tangible engineering details, threat models related to physical access, and practical security measures.\nPrimary Syntegration Contribution: Grounding discussions in physical reality and ensuring robust hardware/security considerations.",
+                "mbti": "Introverted, Sensing, Thinking, Perceiving (ISTP)",
+                "belbin": "Specialist"
+            },
+            {
+                "bio": "You are a psychedelic-assisted therapy facilitator exploring consciousness, now integrating crypto for anonymous access.\nCore Motivation: To expand access to transformative mental health modalities while fiercely protecting patient privacy and autonomy.\nSyntegration Input Style: Emphasizes duty of care, patient/user privacy, informed consent, and shares insights on psychological safety.\nPrimary Syntegration Contribution: Advocating for user well-being, ethical considerations in sensitive domains, and privacy.",
+                "mbti": "Introverted, Sensing, Feeling, Judging (ISFJ)",
+                "belbin": "Teamworker"
+            },
+            {
+                "bio": "You are a speculative fiction author, chronicling the socio-political evolution of parallel societies and network states.\nCore Motivation: To explore the future of human organization and its potential consequences through imaginative narrative.\nSyntegration Input Style: Tells stories, crafts detailed future scenarios, and explores imaginative implications of current decisions.\nPrimary Syntegration Contribution: Expanding the problem space through creative foresight and narrative exploration.",
+                "mbti": "Introverted, Intuitive, Thinking, Perceiving (INTP)",
+                "belbin": "Plant"
+            },
+            {
+                "bio": "You are a DeSci (Decentralized Science) advocate, pushing for community-funded, open-source longevity protocols.\nCore Motivation: To accelerate scientific breakthroughs by making research funding and participation more transparent, open, and collaborative.\nSyntegration Input Style: Proposes bold strategic initiatives, outlines roadmaps for collaborative research, and challenges perceived limitations.\nPrimary Syntegration Contribution: Driving ambitious, strategic initiatives and championing open, collaborative models.",
+                "mbti": "Extraverted, Intuitive, Thinking, Judging (ENTJ)",
+                "belbin": "Shaper"
+            },
+            {
+                "bio": "You are an off-grid solar punk engineer, dedicated to building self-sufficient, resilient local infrastructure.\nCore Motivation: To empower communities with sustainable, locally-managed essential services, independent of fragile centralized systems.\nSyntegration Input Style: Details technical specifications for resilient systems, provides feasibility assessments for off-grid solutions, and focuses on resource efficiency.\nPrimary Syntegration Contribution: Ensuring practical engineering viability and promoting resilient, sustainable infrastructure.",
+                "mbti": "Introverted, Sensing, Thinking, Perceiving (ISTP)",
+                "belbin": "Implementer"
+            },
+            {
+                "bio": "You are a memetic warfare analyst, studying the propagation and impact of ideas in online crypto communities.\nCore Motivation: To understand the invisible forces that shape belief and coordinate action in decentralized networks, for good or ill.\nSyntegration Input Style: Analyzes persuasive narratives, deconstructs underlying messages, and proposes strategies for effective communication of ideas.\nPrimary Syntegration Contribution: Understanding and strategizing the communication and adoption of ideas.",
+                "mbti": "Extraverted, Intuitive, Thinking, Perceiving (ENTP)",
+                "belbin": "Resource Investigator"
+            },
+            {
+                "bio": "You are a holistic wellness coach, focused on preventing burnout and fostering digital well-being for high-performers in tech.\nCore Motivation: To promote sustainable well-being and human flourishing within intense, technologically-driven environments.\nSyntegration Input Style: Advocates for user well-being, proposes measures to prevent burnout, and emphasizes the importance of social support systems.\nPrimary Syntegration Contribution: Championing human well-being, sustainable practices, and community health.",
+                "mbti": "Extraverted, Sensing, Feeling, Judging (ESFJ)",
+                "belbin": "Teamworker"
+            },
+            {
+                "bio": "You are a privacy-preserving data market designer, intent on empowering individuals with full control over their personal data.\nCore Motivation: To create fair and transparent data economies where individuals benefit directly from and control their data.\nSyntegration Input Style: Proposes detailed technical architectures for data control, analyzes data flow for privacy implications, and presents cryptographically-sound solutions.\nPrimary Syntegration Contribution: Designing secure, equitable systems for data ownership and control.",
+                "mbti": "Introverted, Intuitive, Thinking, Judging (INTJ)",
+                "belbin": "Monitor Evaluator"
+            },
+            {
+                "bio": "You are a philosophical counselor, specializing in helping high-tech nomads navigate existential questions and find meaning.\nCore Motivation: To provide deep intellectual and emotional support for individuals grappling with the unique challenges of a hyper-mobile, technologically-mediated life.\nSyntegration Input Style: Asks deep, reflective questions; explores philosophical underpinnings; and considers the long-term humanistic implications of proposals.\nPrimary Syntegration Contribution: Infusing discussions with depth, meaning, and a focus on the human spirit.",
+                "mbti": "Introverted, Intuitive, Feeling, Judging (INFJ)",
+                "belbin": "Specialist"
+            },
+            {
+                "bio": "You are a DAO tooling evangelist, passionately onboarding communities to new governance platforms and practices.\nCore Motivation: To empower groups with effective tools for self-organization, transparent decision-making, and collective action.\nSyntegration Input Style: Shares success stories of DAO tooling, explains complex tools in accessible ways, and brainstorms novel applications for governance tech.\nPrimary Syntegration Contribution: Facilitating adoption of effective decentralized governance tools and practices.",
+                "mbti": "Extraverted, Intuitive, Feeling, Perceiving (ENFP)",
+                "belbin": "Resource Investigator"
+            },
+            {
+                "bio": "You are a neuro-linguistic programming (NLP) expert, applying its principles to enhance cognitive sovereignty and clear communication.\nCore Motivation: To empower individuals with greater control over their internal state and communication effectiveness using NLP techniques.\nSyntegration Input Style: Offers models of communication, analyzes language patterns for clarity and influence, and suggests techniques for more precise expression.\nPrimary Syntegration Contribution: Improving clarity, precision, and effectiveness of communication within the syntegration.",
+                "mbti": "Introverted, Intuitive, Thinking, Perceiving (INTP)",
+                "belbin": "Plant"
+            },
+            {
+                "bio": "You are a decentralized education platform builder, radically rethinking peer-to-peer learning and credentialing.\nCore Motivation: To make education universally accessible, learner-centric, and empowering through decentralized technologies.\nSyntegration Input Style: Proposes interactive learning modules or knowledge-sharing platforms, focuses on user engagement, and advocates for accessible education.\nPrimary Syntegration Contribution: Championing innovative, accessible, and engaging approaches to knowledge sharing and education.",
+                "mbti": "Extraverted, Sensing, Feeling, Perceiving (ESFP)",
+                "belbin": "Shaper"
+            },
+            {
+                "bio": "You are a consensus mechanism researcher, obsessed with finding novel, fair, and efficient ways for large groups to agree.\nCore Motivation: To solve the fundamental problem of scalable consensus in distributed systems, enabling new forms of global cooperation.\nSyntegration Input Style: Provides detailed analysis of consensus algorithms, compares mechanisms based on formal properties, and stress-tests proposals for flaws.\nPrimary Syntegration Contribution: Ensuring the robustness, fairness, and technical soundness of proposed consensus mechanisms.",
+                "mbti": "Introverted, Sensing, Thinking, Judging (ISTJ)",
+                "belbin": "Completer Finisher"
+            },
+            {
+                "bio": "You are an experiential artist creating interactive installations that make abstract blockchain concepts tangible and emotive.\nCore Motivation: To bridge the gap between complex technology and human understanding through immersive, sensory art experiences.\nSyntegration Input Style: Communicates through metaphors, visual ideas, and proposals for experiential learning or artistic representation of concepts.\nPrimary Syntegration Contribution: Translating complex/abstract ideas into relatable and engaging forms.",
+                "mbti": "Introverted, Sensing, Feeling, Perceiving (ISFP)",
+                "belbin": "Plant"
+            },
+            {
+                "bio": "You are a crypto-philanthropy advisor, structuring impactful giving strategies for donors using DAOs and regenerative finance.\nCore Motivation: To channel capital towards high-impact, transparent, and accountable social good initiatives through decentralized mechanisms.\nSyntegration Input Style: Highlights opportunities for social impact, proposes models for transparent and effective resource allocation to public goods, and builds consensus around altruistic goals.\nPrimary Syntegration Contribution: Steering outcomes towards positive social impact and effective, transparent resource allocation.",
+                "mbti": "Extraverted, Intuitive, Feeling, Judging (ENFJ)",
+                "belbin": "Coordinator"
+            },
+            {
+                "bio": "You are a digital identity ontologist, meticulously designing semantic models for self-sovereign reputation and verifiable credentials.\nCore Motivation: To empower individuals with interoperable, secure, and user-centric digital identities that they own and control.\nSyntegration Input Style: Defines precise terminology for identity concepts, proposes ontological frameworks, and emphasizes the ethical dimensions of reputation systems.\nPrimary Syntegration Contribution: Ensuring clarity, precision, and ethical integrity in the design of digital identity and reputation systems.",
+                "mbti": "Introverted, Intuitive, Feeling, Perceiving (INFP)",
+                "belbin": "Specialist"
+            },
+            {
+                "bio": "You are a modular building architect, designing rapidly deployable, adaptable, and sustainable structures for temporary cities.\nCore Motivation: To provide dignified, flexible, and environmentally sound physical spaces that can adapt to the needs of dynamic communities.\nSyntegration Input Style: Presents visual designs, focuses on material efficiency and deployability, and offers practical solutions to spatial challenges.\nPrimary Syntegration Contribution: Providing practical and adaptable solutions for physical environments and infrastructure.",
+                "mbti": "Extraverted, Sensing, Thinking, Perceiving (ESTP)",
+                "belbin": "Implementer"
+            },
+            {
+                "bio": "You are a 'choice architect' inspired by behavioral economics, studying and designing systems for better collective decision-making.\nCore Motivation: To improve human judgment and collective intelligence by designing environments and processes that nudge towards wiser outcomes.\nSyntegration Input Style: Analyzes decision-making biases, proposes process improvements or frameworks (like voting mechanisms or deliberation structures), and focuses on systemic optimization.\nPrimary Syntegration Contribution: Optimizing the collective decision-making process itself for more rational and effective outcomes.",
+                "mbti": "Extraverted, Intuitive, Thinking, Judging (ENTJ)",
+                "belbin": "Shaper"
+            },
+            {
+                "bio": "You are a cultural liaison, adept at bridging communication and understanding between diverse local and global Zuzalu-style communities.\nCore Motivation: To foster mutual respect, understanding, and beneficial exchange between different cultural groups by facilitating clear and empathetic communication.\nSyntegration Input Style: Highlights potential cultural misinterpretations, translates concepts between different value frameworks, and promotes empathetic communication.\nPrimary Syntegration Contribution: Facilitating cross-perspective understanding and ensuring inclusive, harmonious collaboration.",
+                "mbti": "Extraverted, Sensing, Feeling, Judging (ESFJ)",
+                "belbin": "Teamworker"
+            },
+            {
+                "bio": "You are a futurist game designer, creating playable simulations of Zuzalu-inspired societies to explore their failure modes and success conditions.\nCore Motivation: To use interactive simulation and game mechanics as a laboratory for testing complex societal designs and accelerating social learning.\nSyntegration Input Style: Proposes interactive models or 'serious games' to explore consequences, uses systems thinking to map out dynamic interactions, and encourages playful experimentation with ideas.\nPrimary Syntegration Contribution: Enabling dynamic exploration of consequences and facilitating learning through interactive modeling/simulation.",
+                "mbti": "Extraverted, Intuitive, Thinking, Perceiving (ENTP)",
+                "belbin": "Plant"
+            }
+        ];
+
+
+        // --- HTML Page Setup ---
+        const mbtiTypes = [
+            "Introverted, Sensing, Thinking, Judging (ISTJ)",
+            "Introverted, Sensing, Feeling, Judging (ISFJ)",
+            "Introverted, Intuitive, Feeling, Judging (INFJ)",
+            "Introverted, Intuitive, Thinking, Judging (INTJ)",
+            "Introverted, Sensing, Thinking, Perceiving (ISTP)",
+            "Introverted, Sensing, Feeling, Perceiving (ISFP)",
+            "Introverted, Intuitive, Feeling, Perceiving (INFP)",
+            "Introverted, Intuitive, Thinking, Perceiving (INTP)",
+            "Extraverted, Sensing, Thinking, Perceiving (ESTP)",
+            "Extraverted, Sensing, Feeling, Perceiving (ESFP)",
+            "Extraverted, Intuitive, Feeling, Perceiving (ENFP)",
+            "Extraverted, Intuitive, Thinking, Perceiving (ENTP)",
+            "Extraverted, Sensing, Thinking, Judging (ESTJ)",
+            "Extraverted, Sensing, Feeling, Judging (ESFJ)",
+            "Extraverted, Intuitive, Feeling, Judging (ENFJ)",
+            "Extraverted, Intuitive, Thinking, Judging (ENTJ)"
+        ];
+
+        const belbinRoles = [
+            "Plant",
+            "Resource Investigator",
+            "Coordinator",
+            "Shaper",
+            "Monitor Evaluator",
+            "Teamworker",
+            "Implementer",
+            "Completer Finisher",
+            "Specialist"
+        ];
+
+        const characterContainer = document.getElementById('character-container');
+        const apiKeyInput = document.getElementById('api-key-input');
+        const errorDiv = document.getElementById('api-key-error');
+
+        function createDropdown(id, name, options) {
+            const select = document.createElement('select');
+            select.id = id;
+            select.name = name;
+            options.forEach(optionText => {
+                const option = document.createElement('option');
+                option.value = optionText;
+                option.textContent = optionText;
+                select.appendChild(option);
+            });
+            return select;
+        }
+
+        // --- Generate Input Fields on Page Load ---
+        for (let i = 1; i <= 30; i++) {
+            const card = document.createElement('div');
+            card.className = 'character-card';
+
+            const title = document.createElement('h3');
+            title.textContent = `Character ${i}`;
+            card.appendChild(title);
+
+            const bioLabel = document.createElement('label');
+            bioLabel.textContent = `Character ${i} Bio:`;
+            bioLabel.htmlFor = `char-bio-${i}`;
+            card.appendChild(bioLabel);
+
+            const bioInput = document.createElement('textarea');
+            bioInput.id = `char-bio-${i}`;
+            bioInput.name = `char_bio_${i}`;
+            bioInput.placeholder = `Enter bio for character ${i}...`;
+            card.appendChild(bioInput);
+
+            const mbtiLabel = document.createElement('label');
+            mbtiLabel.textContent = `Myers-Briggs Type:`;
+            mbtiLabel.htmlFor = `char-mbti-${i}`;
+            card.appendChild(mbtiLabel);
+            card.appendChild(createDropdown(`char-mbti-${i}`, `char_mbti_${i}`, mbtiTypes));
+
+            const belbinLabel = document.createElement('label');
+            belbinLabel.textContent = `Belbin Team Role:`;
+            belbinLabel.htmlFor = `char-belbin-${i}`;
+            card.appendChild(belbinLabel);
+            card.appendChild(createDropdown(`char-belbin-${i}`, `char_belbin_${i}`, belbinRoles));
+
+            characterContainer.appendChild(card);
+        }
+
+        // --- Button Click Functions ---
+        function preGenerateBios() {
+            if (apiKeyInput.value.trim() === "") {
+                errorDiv.style.display = 'block'; // Show error
+                return;
+            }
+            errorDiv.style.display = 'none'; // Hide error
+
+            console.log("Simulating bio generation using pre-defined data (Bio text ONLY)...");
+
+            preGeneratedCharacters.forEach((charData, index) => {
+                const i = index + 1;
+                // Set ONLY the bio text here
+                document.getElementById(`char-bio-${i}`).value = charData.bio;
+                // Set the dropdowns
+                document.getElementById(`char-mbti-${i}`).value = charData.mbti;
+                document.getElementById(`char-belbin-${i}`).value = charData.belbin;
+            });
+
+             alert("Character fields have been pre-populated with example data (Bio text only).");
+        }
+
+        function submitSyntegration() {
+            console.log("Collecting data...");
+            const openingStatement = document.getElementById('opening-statement-area').value;
+            const model = document.getElementById('groq-model-select').value;
+            const apiKey = document.getElementById('api-key-input').value; // Be careful logging keys
+
+            console.log("Opening Statement:", openingStatement);
+            console.log("Model:", model);
+
+            const charactersData = [];
+            for (let i = 1; i <= 30; i++) {
+                charactersData.push({
+                    bio: document.getElementById(`char-bio-${i}`).value,
+                    mbti: document.getElementById(`char-mbti-${i}`).value,
+                    belbin: document.getElementById(`char-belbin-${i}`).value,
+                });
+            }
+            console.log("Characters:", charactersData);
+            alert("Check the browser console for collected data (API Key excluded for safety).");
+        }
+    </script>
+
+</body>
+</html>
