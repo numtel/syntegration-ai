@@ -16,7 +16,7 @@ async function geminiRequest(prompt, maxOutputTokens) {
       maxOutputTokens,
     },
   });
-  const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
+  const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json'
@@ -56,7 +56,7 @@ async function openaiRequest(prompt, maxOutputTokens) {
       "top_p": 1,
       "store": true
     });
-    const res = await fetch('https://api.openai.com/v1/responses', {
+    const res = await fetchWithRetry('https://api.openai.com/v1/responses', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
@@ -84,7 +84,7 @@ async function groqRequest(prompt, maxOutputTokens) {
       }],
       "max_completion_tokens": maxOutputTokens,
     });
-    const res = await fetch('https://api.groq.com/openai/v1/chat/completions', {
+    const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
@@ -99,4 +99,24 @@ async function groqRequest(prompt, maxOutputTokens) {
     throw error;
   }
   return out;
+}
+
+ async function fetchWithRetry(url, options = {}, retries = 5, delay = 1000) {
+    for (let attempt = 0; attempt < retries; attempt++) {
+        try {
+            const response = await fetch(url, options);
+            return response;
+        } catch (error) {
+            if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
+                if (attempt < retries - 1) {
+                    console.warn(`Retrying fetch (${attempt + 1}/${retries}) after timeout...`);
+                    await new Promise(res => setTimeout(res, delay * Math.pow(2, attempt))); // Exponential backoff
+                } else {
+                    throw new Error(`Fetch failed after ${retries} retries: ${error.message}`);
+                }
+            } else {
+                throw error; // If it's not a timeout error, rethrow it immediately
+            }
+        }
+    }
 }
