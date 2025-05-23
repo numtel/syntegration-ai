@@ -1,26 +1,11 @@
-import {characterBios} from './bios.js';
-import {
-  top12,
-  sis,
-  similars,
-  flatSis,
-  sisForSign,
-  signsByCharacter,
-  sortedSigns,
-} from './sis.js';
-import {
-  charSessions,
-  topicParticipants,
-  schedule,
-} from './hill.js';
-import { convo1, critique1 } from './convo1.js';
+import {writeFileSync} from 'node:fs';
+import {bios} from './bios.3.js';
+import {decodeOptimizer} from './hill.js';
 import {request} from './ai.js';
+import {optimizer} from './optimizer.js';
 
 const SKIP_SUMMARY = false;
 
-const triggerQuestion = `
-  How to best create a d/acc pop-up city that could exist permanently?
-`;
 
 const desireRating = 'Respond with only your thoughts (no introduction of yourself) at this point in the conversation and put a number from 0-9 as the absolutely last character returned (after the last period, only the integer digit) which correlates to your desire to respond again.';
 
@@ -56,7 +41,13 @@ function rand(max) {
 }
 
 (async function() {
-  const sis = await generateSIs();
+  // TODO load trigger question and bios from a file
+  const triggerQuestion = `
+    How to best create a d/acc pop-up city that could exist permanently?
+  `;
+  const characterBios = bios;
+
+  const sis = await generateSIs(characterBios, triggerQuestion);
   const flatSis = sis.flat();
   const similars = await dupeSIs(flatSis);
   const toRemove = similars.flat();
@@ -65,7 +56,7 @@ function rand(max) {
 
   const sisForSign = [...fixedSimilars, ...splicedSis];
   console.log(similars, fixedSimilars);
-  const signsByCharacter = await signSIs(sisForSign);
+  const signsByCharacter = await signSIs(sisForSign, characterBios, triggerQuestion);
   console.log(signsByCharacter);
 
   const siSignTally = {};
@@ -82,37 +73,49 @@ function rand(max) {
     .map(([key, tally]) => ({ key, tally }))
     .sort((a, b) => b.tally - a.tally);
 
+  if(sortedSigns.length < 12) {
+    console.error(sortedSigns);
+    throw new Error('not enough unique SIs!');
+  }
   const top12 = sortedSigns.slice(0,12);
-  const scoresByCharacter = await scoreSIs(sisForSign);
+  const scoresByCharacter = await scoreSIs(sisForSign, characterBios, top12);
   console.log(top12, scoresByCharacter);
-  console.log(scoresByCharacter.map(x=>x.join(',')).join('\n'));
+  const rows = await optimizer(scoresByCharacter);
+  console.log(rows);
+  const {schedule, topicParticipants} = decodeOptimizer(rows);
 
-// 
-//   const convos = [];
-//   for(let iteration = 0; iteration <3; iteration++) {
-//     for(let sessionIdx = 0; sessionIdx < 6; sessionIdx++) {
-//       for(let polarity = 0; polarity < 2; polarity++) {
-//         const seg1 = await convoSeg1(sessionIdx,polarity,convos);
-//         const critique = await convoCritique(sessionIdx,polarity,seg1,convos);
-//         const seg2 = await convoSeg2(sessionIdx,polarity,seg1, critique,convos);
-//         const convo = {
-//           iteration,
-//           index: schedule[sessionIdx][polarity],
-//           si: sisForSign[top12[schedule[sessionIdx][polarity]].key],
-//           seg1,
-//           critique,
-//           seg2,
-//         };
-//         if(!SKIP_SUMMARY) {
-//           convo.summary = await summarizeConvo(convo);
-//         }
-//         convos.push(convo);
-//         progress++;
-//       }
-//     }
-//   }
-//   console.log(JSON.stringify(convos));
+  console.log(schedule);
+  console.log(topicParticipants);
 
+  const config = {
+    sisForSign, top12, schedule, topicParticipants, characterBios, triggerQuestion,
+  };
+
+  const convos = [];
+  for(let iteration = 0; iteration <3; iteration++) {
+    for(let sessionIdx = 0; sessionIdx < 6; sessionIdx++) {
+      for(let polarity = 0; polarity < 2; polarity++) {
+        const seg1 = await convoSeg1(sessionIdx,polarity,convos, config);
+        const critique = await convoCritique(sessionIdx,polarity,seg1,convos, config);
+        const seg2 = await convoSeg2(sessionIdx,polarity,seg1, critique,convos, config);
+        const convo = {
+          iteration,
+          index: schedule[sessionIdx][polarity],
+          si: sisForSign[top12[schedule[sessionIdx][polarity]].key],
+          seg1,
+          critique,
+          seg2,
+        };
+        if(!SKIP_SUMMARY) {
+          convo.summary = await summarizeConvo(convo);
+        }
+        convos.push(convo);
+        progress++;
+      }
+    }
+  }
+  writeFileSync('./out.json', JSON.stringify(convos));
+  console.log('Complete!');
 })();
 
 async function summarizeConvo(convo) {
@@ -129,7 +132,8 @@ async function summarizeConvo(convo) {
   `, 1500);
 }
 
-function convoHistory(charIndex, convos) {
+function convoHistory(charIndex, convos, config) {
+  const {topicParticipants} = config;
   const myTopics = [];
   for(let i = 0; i < topicParticipants.length; i++) {
     if(topicParticipants[i].participants.includes(charIndex)
@@ -169,7 +173,8 @@ function convoHistory(charIndex, convos) {
   `).join('\n');
 }
 
-async function convoSeg1(sessionIndex, polarity, convos) {
+async function convoSeg1(sessionIndex, polarity, convos, config) {
+  const {sisForSign, top12, schedule, topicParticipants, characterBios, triggerQuestion} = config;
   const charCtx = {};
   const curSI = sisForSign[top12[schedule[sessionIndex][polarity]].key];
   const curConvo = topicParticipants[schedule[sessionIndex][polarity]];
@@ -188,7 +193,7 @@ async function convoSeg1(sessionIndex, polarity, convos) {
       You are participating in a syntegration conversation about the following trigger question:
       ${triggerQuestion}
 
-      ${convoHistory(curPart, convos)}
+      ${convoHistory(curPart, convos, config)}
 
       Your statement of importance to discuss is:
       ${curSI}
@@ -228,7 +233,8 @@ async function convoSeg1(sessionIndex, polarity, convos) {
   }
   return charCtx[curConvo.participants[0]];
 }
-async function convoCritique(sessionIndex, polarity, seg1Transcript, convos) {
+async function convoCritique(sessionIndex, polarity, seg1Transcript, convos, config) {
+  const {sisForSign, top12, schedule, topicParticipants, characterBios, triggerQuestion} = config;
   const curSI = sisForSign[top12[schedule[sessionIndex][polarity]].key];
   const curConvo = topicParticipants[schedule[sessionIndex][polarity]];
   const charCtx = {};
@@ -247,7 +253,7 @@ async function convoCritique(sessionIndex, polarity, seg1Transcript, convos) {
       You are critiquing in a syntegration conversation about the following trigger question:
       ${triggerQuestion}
 
-      ${convoHistory(curPart, convos)}
+      ${convoHistory(curPart, convos, config)}
 
       Your statement of importance to discuss is:
       ${curSI}
@@ -280,7 +286,8 @@ async function convoCritique(sessionIndex, polarity, seg1Transcript, convos) {
   }
   return charCtx[curConvo.critics[0]];
 }
-async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscript, convos) {
+async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscript, convos, config) {
+  const {sisForSign, top12, schedule, topicParticipants, characterBios, triggerQuestion} = config;
   const charCtx = {};
   const curSI = sisForSign[top12[schedule[sessionIndex][polarity]].key];
   const curConvo = topicParticipants[schedule[sessionIndex][polarity]];
@@ -299,7 +306,7 @@ async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscr
       You are participating in a syntegration conversation about the following trigger question:
       ${triggerQuestion}
 
-      ${convoHistory(curPart, convos)}
+      ${convoHistory(curPart, convos, config)}
 
       Your statement of importance to discuss is:
       ${curSI}
@@ -351,7 +358,7 @@ async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscr
   return charCtx[curConvo.participants[0]];
 }
 
-async function scoreSIs(sisForSign) {
+async function scoreSIs(sisForSign, characterBios, top12) {
   const outScores = [];
   for(let characterBio of characterBios) {
     const prompt = `
@@ -402,7 +409,7 @@ async function combineSIs(flatSis, similars) {
   return outSis;
 }
 
-async function signSIs(sisForSign) {
+async function signSIs(sisForSign, characterBios, triggerQuestion) {
   const outSigns = [];
   for(let characterBio of characterBios) {
     const prompt = `
@@ -426,7 +433,7 @@ async function signSIs(sisForSign) {
   return outSigns;
 }
 
-async function generateSIs() {
+async function generateSIs(characterBios, triggerQuestion) {
   const allSis = [];
   for(let characterBio of characterBios) {
     const rawSI = await aiRequest(`

@@ -1,4 +1,4 @@
-export const characterBios = [
+export const bios = [
   `You are Vitalik Buterin.`,
   `You are an anarcho-communist.`,
   `You are a liberal from Germany.`,

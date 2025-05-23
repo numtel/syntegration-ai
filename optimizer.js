@@ -1,14 +1,3 @@
-#!/usr/bin/env node
-
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-import { fileURLToPath } from 'url';
-
-// Helper to mimic __dirname in ES modules
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-
 // ===== ICOSAHEDRON STRUCTURE WITH COLORS =====
 const phi = (1 + Math.sqrt(5)) / 2; // Golden ratio
 
@@ -225,64 +214,7 @@ function optimize(participants, max_iter = 1500000) {
 }
 
 // ===== MAIN EXECUTION =====
-async function main() {
-    const possible_files = [
-        'voting_data.csv', 'Excel.csv', 'data.csv',
-        'input.csv', 'votes.csv', 'participants.csv', 'syntegrity_input.csv'
-    ];
-    const search_paths = [
-        process.cwd(), __dirname,
-        path.join(os.homedir(), 'Desktop'), path.join(os.homedir(), 'Downloads')
-    ];
-
-    let found_file = null;
-    for (const s_path of search_paths) {
-        for (const filename of possible_files) {
-            const full_path = path.join(s_path, filename);
-            if (fs.existsSync(full_path)) {
-                found_file = full_path;
-                break;
-            }
-        }
-        if (found_file) break;
-    }
-
-    let participants_data;
-    if (!found_file) {
-        console.log("\nWARNING: No input file found. Creating template 'voting_data.csv'...");
-        const template_data_arr = Array(30).fill(null).map(() =>
-            Array(12).fill(null).map(() => Math.floor(Math.random() * 9) + 1)
-        );
-        const csv_content = template_data_arr.map(row => row.join(',')).join('\n');
-        fs.writeFileSync('voting_data.csv', csv_content);
-        console.log("Created template file 'voting_data.csv' with random data.");
-        console.log("Please replace it with your actual voting data and rerun the script.");
-        return;
-    }
-
-    try {
-        console.log(`\nLoading data from: ${found_file}`);
-        const file_content = fs.readFileSync(found_file, 'utf-8');
-        participants_data = file_content.split('\n')
-            .map(line => line.trim())
-            .filter(line => line) // Remove empty lines
-            .map(line => line.split(',').map(val => parseFloat(val.trim())));
-
-        if (participants_data.length !== 30 || !participants_data.every(row => row.length === 12 && row.every(v => !isNaN(v)))) {
-            throw new Error(`File must have 30 rows × 12 columns of numbers. Got ${participants_data.length} rows, and first row length ${participants_data[0]?.length}. Check for non-numeric values.`);
-        }
-    } catch (e) {
-        console.error(`\nERROR LOADING FILE: ${e.message}`);
-        console.log("\nTROUBLESHOOTING:");
-        console.log(`1. Open ${found_file} in a text editor and verify:`);
-        console.log("   - Exactly 30 rows of numbers");
-        console.log("   - 12 comma-separated values per row");
-        console.log("   - No headers or extra lines/empty lines");
-        console.log("2. In Excel: File → Save As → 'CSV (Comma delimited)'");
-        console.log("3. Try saving with a different name like 'voting_data.csv'");
-        return;
-    }
-
+export async function optimizer(participants_data) {
     console.log("\nRunning optimization...");
     const { best_topics, best_struts, best_score } = optimize(participants_data, 2200000); // Iteration count from Python call
     console.log(`\nOptimization complete. Best score: ${Math.floor(best_score)}`);
@@ -317,24 +249,5 @@ async function main() {
         });
     }
 
-    const column_order = [
-        'Participant', 'ColorPair', 'Topic1', 'Topic2',
-        'Critic1', 'Critic2', 'Vote1', 'Vote2', 'Score', 'LowScore'
-    ];
-
-    const now = new Date();
-    const timestamp = `${now.getFullYear()}${(now.getMonth() + 1).toString().padStart(2, '0')}${now.getDate().toString().padStart(2, '0')}_${now.getHours().toString().padStart(2, '0')}${now.getMinutes().toString().padStart(2, '0')}`;
-    const output_file = `syntegrity_results_${timestamp}.csv`;
-
-    const csv_header = column_order.join(',') + '\n';
-    const csv_rows = results.map(row => 
-        column_order.map(col => row[col]).join(',')
-    ).join('\n');
-    
-    fs.writeFileSync(output_file, csv_header + csv_rows);
-    console.log(`\nResults saved to ${output_file}`);
-    const low_score_count = results.filter(r => r.LowScore).length;
-    console.log(`Assignments with votes <6: ${low_score_count}`);
+    return results;
 }
-
-main().catch(err => console.error("Unhandled error in main:", err));

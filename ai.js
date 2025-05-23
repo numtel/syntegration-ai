@@ -1,7 +1,7 @@
 export async function request(prompt, maxOutputTokens) {
-  await delay(300);
-  return groqRequest(prompt, maxOutputTokens);
+//   await delay(300);
   return geminiRequest(prompt, maxOutputTokens);
+  return groqRequest(prompt, maxOutputTokens);
   return openaiRequest(prompt, maxOutputTokens);
 }
 
