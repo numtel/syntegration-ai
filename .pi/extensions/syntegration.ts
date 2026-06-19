@@ -1,6 +1,25 @@
 import type { ExtensionAPI } from '@earendil-works/pi-coding-agent';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
 import { bios } from '../../bios.3.js';
 import { runSyntegration, type ProgressEvent } from '../../src/syntegration.ts';
+
+function resolveResumePath(cwd: string, requested?: string) {
+  if (requested) {
+    const path = requested.startsWith('/') ? requested : join(cwd, requested);
+    if (!existsSync(path)) throw new Error(`Checkpoint not found: ${path}`);
+    return path;
+  }
+
+  const outDir = join(cwd, 'out');
+  if (!existsSync(outDir)) throw new Error(`No out/ directory found at ${outDir}`);
+  const partials = readdirSync(outDir)
+    .filter((name) => name.endsWith('.partial.json'))
+    .map((name) => join(outDir, name))
+    .sort((a, b) => statSync(b).mtimeMs - statSync(a).mtimeMs);
+  if (!partials[0]) throw new Error(`No .partial.json checkpoints found in ${outDir}`);
+  return partials[0];
+}
 
 export default function syntegrationExtension(pi: ExtensionAPI) {
   pi.registerCommand('syntegrate', {
@@ -8,8 +27,12 @@ export default function syntegrationExtension(pi: ExtensionAPI) {
     handler: async (args, ctx) => {
       await ctx.waitForIdle();
 
-      const inlineQuestion = args?.trim();
-      const triggerQuestion = inlineQuestion || await ctx.ui.input(
+      const rawArgs = args?.trim() ?? '';
+      const resumeMatch = rawArgs.match(/^--resume(?:\s+(.+))?$/);
+      const resumePath = resumeMatch ? resolveResumePath(ctx.cwd, resumeMatch[1]?.trim()) : undefined;
+      const resumedState = resumePath ? JSON.parse(readFileSync(resumePath, 'utf8')) : undefined;
+      const inlineQuestion = resumeMatch ? '' : rawArgs;
+      const triggerQuestion = resumedState?.triggerQuestion || inlineQuestion || await ctx.ui.input(
         'Opening question',
         'How should we...?'
       );
@@ -43,9 +66,9 @@ export default function syntegrationExtension(pi: ExtensionAPI) {
       pi.sendMessage({
         customType: 'syntegration',
         display: true,
-        content: `Starting syntegration.\n\nOpening question: ${triggerQuestion}`,
+        content: `${resumePath ? 'Resuming' : 'Starting'} syntegration.\n\nOpening question: ${triggerQuestion}${resumePath ? `\n\nCheckpoint: ${resumePath}` : ''}`,
       });
-      push('Starting syntegration.');
+      push(resumePath ? `Resuming from checkpoint: ${resumePath}` : 'Starting syntegration.');
       push(`Nested participant sessions will use model: ${modelLabel}`);
 
       try {
@@ -54,6 +77,7 @@ export default function syntegrationExtension(pi: ExtensionAPI) {
           bios,
           outputDir: `${ctx.cwd}/out`,
           model: ctx.model,
+          resumePath,
           onProgress: (event: ProgressEvent) => {
             push(event.text);
           },

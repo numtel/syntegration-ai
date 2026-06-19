@@ -1,4 +1,4 @@
-import { writeFileSync, mkdirSync } from 'node:fs';
+import { writeFileSync, mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
   AuthStorage,
@@ -24,6 +24,7 @@ export type SyntegrationOptions = {
   skipSummary?: boolean;
   model?: any;
   thinkingLevel?: any;
+  resumePath?: string;
   onProgress?: (event: ProgressEvent) => void | Promise<void>;
 };
 
@@ -146,18 +147,22 @@ class PiRequester {
 }
 
 export async function runSyntegration(options: SyntegrationOptions) {
-  const { triggerQuestion, bios: characterBios } = options;
+  let { triggerQuestion, bios: characterBios } = options;
   const outputDir = options.outputDir ?? join(process.cwd(), 'out');
   const skipSummary = options.skipSummary ?? false;
   const requester = new PiRequester({ model: options.model, thinkingLevel: options.thinkingLevel });
   let progress = 0;
   mkdirSync(outputDir, { recursive: true });
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-  const checkpointPath = join(outputDir, `syntegration-${stamp}.partial.json`);
-  const checkpointMdPath = join(outputDir, `syntegration-${stamp}.partial.md`);
-  const finalJsonPath = join(outputDir, `syntegration-${stamp}.json`);
-  const finalMdPath = join(outputDir, `syntegration-${stamp}.md`);
-  const state: any = { triggerQuestion, phase: 'starting', convos: [] };
+  const resumedState = options.resumePath ? JSON.parse(readFileSync(options.resumePath, 'utf8')) : undefined;
+  const stamp = resumedState?.runId ?? new Date().toISOString().replace(/[:.]/g, '-');
+  const checkpointPath = options.resumePath ?? join(outputDir, `syntegration-${stamp}.partial.json`);
+  const checkpointMdPath = checkpointPath.replace(/\.partial\.json$/, '.partial.md');
+  const finalJsonPath = checkpointPath.replace(/\.partial\.json$/, '.json');
+  const finalMdPath = checkpointPath.replace(/\.partial\.json$/, '.md');
+  const state: any = resumedState ?? { runId: stamp, triggerQuestion, phase: 'starting', convos: [] };
+  state.triggerQuestion = state.triggerQuestion ?? triggerQuestion;
+  triggerQuestion = state.triggerQuestion;
+  state.convos = state.convos ?? [];
 
   const saveCheckpoint = async (phase: string) => {
     state.phase = phase;
@@ -174,36 +179,41 @@ export async function runSyntegration(options: SyntegrationOptions) {
   };
 
   try {
-    await emit('status', 'Generating statements of importance...');
-    const sis = await generateSIs(characterBios, triggerQuestion, aiRequest, emit);
+    await emit('status', state.sis ? 'Resuming from generated SIs...' : 'Generating statements of importance...');
+    const sis = state.sis ?? await generateSIs(characterBios, triggerQuestion, aiRequest, emit);
     state.sis = sis;
-    const flatSis = sis.flat();
+    const flatSis = state.flatSis ?? sis.flat();
     state.flatSis = flatSis;
-    await saveCheckpoint('generated-sis');
+    if (!resumedState?.sis) await saveCheckpoint('generated-sis');
 
-    await emit('status', 'Finding duplicate/similar SIs...');
-    const similars = sanitizeSimilarGroups(await dupeSIs(flatSis, aiRequest), flatSis.length);
-    const toRemove = similars.flat();
-    const splicedSis = flatSis.filter((_x, i) => !toRemove.includes(i));
+    let sisForSign: string[] = state.sisForSign;
+    if (!sisForSign) {
+      await emit('status', 'Finding duplicate/similar SIs...');
+      const similars = sanitizeSimilarGroups(await dupeSIs(flatSis, aiRequest), flatSis.length);
+      const toRemove = similars.flat();
+      const splicedSis = flatSis.filter((_x, i) => !toRemove.includes(i));
 
-    await emit('status', `Combining ${similars.length} similar SI group(s)...`);
-    const fixedSimilars = await combineSIs(flatSis, similars, aiRequest);
-    const sisForSign = [...fixedSimilars, ...splicedSis];
-    state.similars = similars;
-    state.fixedSimilars = fixedSimilars;
-    state.sisForSign = sisForSign;
-    await emit('message', `Generated ${flatSis.length} raw SI(s); ${sisForSign.length} after dedupe.`);
-    if (sisForSign.length < 12) {
-      await emit('status', `Duplicate detection was too aggressive (${sisForSign.length} SIs). Falling back to uncombined SIs.`);
-      sisForSign.splice(0, sisForSign.length, ...flatSis);
+      await emit('status', `Combining ${similars.length} similar SI group(s)...`);
+      const fixedSimilars = await combineSIs(flatSis, similars, aiRequest);
+      sisForSign = [...fixedSimilars, ...splicedSis];
+      state.similars = similars;
+      state.fixedSimilars = fixedSimilars;
       state.sisForSign = sisForSign;
+      await emit('message', `Generated ${flatSis.length} raw SI(s); ${sisForSign.length} after dedupe.`);
+      if (sisForSign.length < 12) {
+        await emit('status', `Duplicate detection was too aggressive (${sisForSign.length} SIs). Falling back to uncombined SIs.`);
+        sisForSign.splice(0, sisForSign.length, ...flatSis);
+        state.sisForSign = sisForSign;
+      }
+      await saveCheckpoint('deduped-sis');
+    } else {
+      await emit('status', 'Resuming from deduped SIs...');
     }
-    await saveCheckpoint('deduped-sis');
 
-    await emit('status', 'Participants are signing SIs...');
-    const signsByCharacter = await signSIs(sisForSign, characterBios, triggerQuestion, aiRequest, emit);
+    await emit('status', state.signsByCharacter ? 'Resuming from signed SIs...' : 'Participants are signing SIs...');
+    const signsByCharacter = state.signsByCharacter ?? await signSIs(sisForSign, characterBios, triggerQuestion, aiRequest, emit);
     state.signsByCharacter = signsByCharacter;
-    await saveCheckpoint('signed-sis');
+    if (!resumedState?.signsByCharacter) await saveCheckpoint('signed-sis');
     const siSignTally: Record<number, number> = {};
     for (const signs of signsByCharacter) {
       for (const index of signs) siSignTally[index] = (siSignTally[index] ?? 0) + 1;
@@ -220,26 +230,31 @@ export async function runSyntegration(options: SyntegrationOptions) {
       }
     }
     if (sortedSigns.length < 12) throw new Error(`Need at least 12 SIs, only have ${sortedSigns.length}.`);
-    const top12 = sortedSigns.slice(0, 12);
+    const top12 = state.top12 ?? sortedSigns.slice(0, 12);
     state.top12 = top12;
-    await saveCheckpoint('selected-top12');
+    if (!resumedState?.top12) await saveCheckpoint('selected-top12');
 
-    await emit('status', 'Participants are scoring top SIs...');
-    const scoresByCharacter = await scoreSIs(sisForSign, characterBios, top12, aiRequest, emit);
+    await emit('status', state.schedule ? 'Resuming from schedule...' : 'Participants are scoring top SIs...');
+    const scoresByCharacter = state.scoresByCharacter ?? await scoreSIs(sisForSign, characterBios, top12, aiRequest, emit);
     state.scoresByCharacter = scoresByCharacter;
-    const rows = await optimizer(scoresByCharacter);
+    const rows = state.optimizerRows ?? await optimizer(scoresByCharacter);
     state.optimizerRows = rows;
-    const { schedule, topicParticipants } = decodeOptimizer(rows);
+    const decoded = state.schedule && state.topicParticipants ? { schedule: state.schedule, topicParticipants: state.topicParticipants } : decodeOptimizer(rows);
+    const { schedule, topicParticipants } = decoded;
     state.schedule = schedule;
     state.topicParticipants = topicParticipants;
-    await saveCheckpoint('scheduled');
+    if (!resumedState?.schedule) await saveCheckpoint('scheduled');
 
     await emit('status', 'Schedule created. Running 36 conversations...');
     const config = { sisForSign, top12, schedule, topicParticipants, characterBios, triggerQuestion, skipSummary, aiRequest, emit };
     const convos: any[] = state.convos;
+    progress = convos.length;
+    let convoOrdinal = 0;
     for (let iteration = 0; iteration < 3; iteration++) {
       for (let sessionIdx = 0; sessionIdx < 6; sessionIdx++) {
         for (let polarity = 0; polarity < 2; polarity++) {
+          convoOrdinal++;
+          if (convoOrdinal <= convos.length) continue;
           const topicIndex = schedule[sessionIdx][polarity];
           await emit('status', `Iteration ${iteration + 1}/3, session ${sessionIdx + 1}${polarity ? 'B' : 'A'}, topic ${topicIndex + 1}`);
           const seg1 = await convoSeg1(sessionIdx, polarity, convos, config);
@@ -530,5 +545,14 @@ function parseStatementLines(text: string) {
 }
 
 function renderMarkdown(result: any) {
-  return `# Syntegration\n\n## Opening Question\n\n${result.triggerQuestion}\n\n## Top Statements\n\n${result.top12.map((item: any, i: number) => `${i + 1}. ${result.sisForSign[item.key]} (${item.tally} signatures)`).join('\n')}\n\n## Conversations\n\n${result.convos.map((convo: any) => `### Iteration ${convo.iteration + 1}, Topic ${convo.index + 1}\n\n**SI:** ${convo.si}\n\n${convo.summary ? `**Summary:** ${convo.summary}\n\n` : ''}#### Segment 1\n\n${convo.seg1}\n\n#### Critique\n\n${convo.critique}\n\n#### Segment 2\n\n${convo.seg2}`).join('\n\n')}\n`;
+  const topStatements = result.top12?.length && result.sisForSign?.length
+    ? result.top12.map((item: any, i: number) => `${i + 1}. ${result.sisForSign[item.key]} (${item.tally} signatures)`).join('\n')
+    : '_Not selected yet._';
+  const rawSis = result.flatSis?.length
+    ? `\n\n## Raw Statements\n\n${result.flatSis.map((si: string, i: number) => `${i + 1}. ${si}`).join('\n')}`
+    : '';
+  const conversations = result.convos?.length
+    ? result.convos.map((convo: any) => `### Iteration ${convo.iteration + 1}, Topic ${convo.index + 1}\n\n**SI:** ${convo.si}\n\n${convo.summary ? `**Summary:** ${convo.summary}\n\n` : ''}#### Segment 1\n\n${convo.seg1}\n\n#### Critique\n\n${convo.critique}\n\n#### Segment 2\n\n${convo.seg2}`).join('\n\n')
+    : '_No conversations completed yet._';
+  return `# Syntegration\n\n**Phase:** ${result.phase ?? 'unknown'}\n\n## Opening Question\n\n${result.triggerQuestion}\n\n## Top Statements\n\n${topStatements}${rawSis}\n\n## Conversations\n\n${conversations}\n`;
 }
