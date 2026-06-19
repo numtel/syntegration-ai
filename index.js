@@ -1,7 +1,7 @@
 import {writeFileSync} from 'node:fs';
 import {bios} from './bios.3.js';
 import {decodeOptimizer} from './hill.js';
-import {request} from './ai.js';
+import {disposeSessions, request} from './ai.js';
 import {optimizer} from './optimizer.js';
 
 const SKIP_SUMMARY = false;
@@ -10,10 +10,10 @@ const SKIP_SUMMARY = false;
 const desireRating = 'Respond with only your thoughts (no introduction of yourself) at this point in the conversation and put a number from 0-9 as the absolutely last character returned (after the last period, only the integer digit) which correlates to your desire to respond again.';
 
 let progress = 0;
-function aiRequest(prompt, maxOutputTokens) {
+function aiRequest(prompt, maxOutputTokens, options = {}) {
   console.log(prompt);
   console.log('Progress:', Math.round((progress/(3*6*2)) * 10000)/100, '%');
-  return request(prompt, maxOutputTokens);
+  return request(prompt, maxOutputTokens, options);
 }
 
 function extractNumberFromEnd(input) {
@@ -41,6 +41,7 @@ function rand(max) {
 }
 
 (async function() {
+  try {
   // TODO load trigger question and bios from a file
   const triggerQuestion = `
     How to best create a d/acc pop-up city that could exist permanently?
@@ -116,6 +117,9 @@ function rand(max) {
   }
   writeFileSync('./out.json', JSON.stringify(convos));
   console.log('Complete!');
+  } finally {
+    await disposeSessions();
+  }
 })();
 
 async function summarizeConvo(convo) {
@@ -205,7 +209,10 @@ async function convoSeg1(sessionIndex, polarity, convos, config) {
 
       Limit your response to 3 sentences. Don't always conform to groupthink. Be critical of others' responses. ${desireRating}
     `;
-    const rawOut = await aiRequest(prompt, 250);
+    const rawOut = await aiRequest(prompt, 250, {
+      sessionKey: `character-${curPart}`,
+      characterBio: characterBios[curPart],
+    });
     const [response, responseDesire] = extractNumberFromEnd(rawOut);
     charDesires[curPart] = responseDesire;
     for(let convoChar of [...curConvo.participants, ...curConvo.critics]) {
@@ -271,7 +278,10 @@ async function convoCritique(sessionIndex, polarity, seg1Transcript, convos, con
       Limit your critique to 3 sentences. Play devil's advocate. Look for biases, strawman arguments, etc. Respond with only your critique (no introduction of yourself) at this point in the conversation.
 
     `;
-    const rawOut = await aiRequest(prompt, 250);
+    const rawOut = await aiRequest(prompt, 250, {
+      sessionKey: `character-${curPart}`,
+      characterBio: characterBios[curPart],
+    });
     const response = rawOut.trim();
     for(let convoChar of [...curConvo.participants, ...curConvo.critics]) {
       charCtx[convoChar] = (charCtx[convoChar] || '') + `
@@ -329,7 +339,10 @@ async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscr
       `}
 
     `;
-    const rawOut = await aiRequest(prompt, 250);
+    const rawOut = await aiRequest(prompt, 250, {
+      sessionKey: `character-${curPart}`,
+      characterBio: characterBios[curPart],
+    });
     const [response, responseDesire] = extractNumberFromEnd(rawOut);
     charDesires[curPart] = responseDesire;
     for(let convoChar of [...curConvo.participants, ...curConvo.critics]) {
@@ -360,7 +373,8 @@ async function convoSeg2(sessionIndex, polarity, seg1Transcript, critiqueTranscr
 
 async function scoreSIs(sisForSign, characterBios, top12) {
   const outScores = [];
-  for(let characterBio of characterBios) {
+  for(let charIndex = 0; charIndex < characterBios.length; charIndex++) {
+    const characterBio = characterBios[charIndex];
     const prompt = `
       ${characterBio}
       For each of these syntegration "statements of importance" give a score of 1 to 10.
@@ -370,7 +384,10 @@ async function scoreSIs(sisForSign, characterBios, top12) {
 
       ${top12.map(item => sisForSign[item.key]).join('\n')}
     `;
-    const rawScores = await aiRequest(prompt, 100);
+    const rawScores = await aiRequest(prompt, 100, {
+      sessionKey: `character-${charIndex}`,
+      characterBio,
+    });
     const scores = rawScores.split(',').map(x=>Number(x.trim()));
     outScores.push(scores);
   }
@@ -411,7 +428,8 @@ async function combineSIs(flatSis, similars) {
 
 async function signSIs(sisForSign, characterBios, triggerQuestion) {
   const outSigns = [];
-  for(let characterBio of characterBios) {
+  for(let charIndex = 0; charIndex < characterBios.length; charIndex++) {
+    const characterBio = characterBios[charIndex];
     const prompt = `
       ${characterBio}
       Of these syntegration "statements of importance," (SI) choose which ones you believe are worthy of discussion for this trigger question:
@@ -422,7 +440,10 @@ async function signSIs(sisForSign, characterBios, triggerQuestion) {
       Select a maximum of 15 of the very best SIs. If there are less than 15 that aren't amazing return fewer selections. You must be very excited about these SIs.
       Return only a comma-separated list of the numbers of each SI that you have selected. There should be no other text in the output except the numbers and the commas. Do not include any introductory text about your character in the response.
     `;
-    const rawSigns = await aiRequest(prompt, 500);
+    const rawSigns = await aiRequest(prompt, 500, {
+      sessionKey: `character-${charIndex}`,
+      characterBio,
+    });
     const signs = rawSigns.split(',').map(x => Number(x.trim()) - 1);
     if(signs.includes(NaN)) {
       console.log(prompt, rawSigns);
@@ -435,7 +456,8 @@ async function signSIs(sisForSign, characterBios, triggerQuestion) {
 
 async function generateSIs(characterBios, triggerQuestion) {
   const allSis = [];
-  for(let characterBio of characterBios) {
+  for(let charIndex = 0; charIndex < characterBios.length; charIndex++) {
+    const characterBio = characterBios[charIndex];
     const rawSI = await aiRequest(`
       ${characterBio}
       Generate 3 syntegration "statements of importance" related to this trigger question:
@@ -445,7 +467,10 @@ async function generateSIs(characterBios, triggerQuestion) {
       Relevance: Each SI must relate directly to the overall Opening Question guiding the Syntegration. Keep the main focus in mind.
       Conciseness: Aim for short, impactful statements, ideally a single sentence (the protocol suggests max 10 words). Avoid complex clauses or multiple ideas in one SI. Clarity is key.
       Provocative, Not Conclusive: Good SIs often raise questions, highlight tensions, or propose a perspective that isn't universally accepted yet. They should invite discussion, not close it down. Avoid "motherhood" statements.
-    `, 500);
+    `, 500, {
+      sessionKey: `character-${charIndex}`,
+      characterBio,
+    });
     const SIs = rawSI.split('\n').map(x => x.trim()).filter(x => x !== '');
     allSis.push(SIs);
   }

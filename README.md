@@ -39,12 +39,33 @@ $ git clone git@github.com:numtel/syntegration-ai.git
 $ cd syntegration-ai
 $ npm install
 $ vim .env
-# GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY vars
-# Choose your model in the ai.js file
+# Optional: GEMINI_API_KEY, GROQ_API_KEY, OPENAI_API_KEY vars
+# Or run `pi` and `/login` to use Pi's built-in subscription auth.
+# Pi will use your configured/default available model.
 ```
 
-Configure the character bios in `bios.3.js` and your trigger question in `index.js` then run `npm start` to begin a syntegration!
+Configure the character bios in `bios.3.js`, start Pi from this repository, and run the project-local slash command:
+
+```bash
+$ pi
+```
+
+```text
+/syntegrate
+```
+
+Pi will prompt for the opening question. You can also pass it inline:
+
+```text
+/syntegrate How to best create a d/acc pop-up city that could exist permanently?
+```
+
+The extension streams live progress in the Pi UI and writes JSON/Markdown artifacts under `out/`.
 
 The process performs many, many AI requests and can take longer than 30 minutes to run completely.
+
+AI calls are routed through Pi's SDK. Each character gets its own independent in-memory Pi agent session, so its context accumulates only the syntegration work and conversations that character participates in. Moderator tasks such as duplicate SI detection, combining, and summarization use a separate moderator session.
+
+The old `npm start` script is still available for non-interactive compatibility, but the recommended workflow is the Pi slash command in `.pi/extensions/syntegration.ts`.
 
 

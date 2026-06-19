@@ -12,5 +12,8 @@
   "description": "",
   "devDependencies": {
     "dotenv-cli": "^8.0.0"
+  },
+  "dependencies": {
+    "@earendil-works/pi-coding-agent": "^0.79.7"
   }
 }

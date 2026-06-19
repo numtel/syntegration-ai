@@ -1,122 +1,95 @@
-export async function request(prompt, maxOutputTokens) {
-//   await delay(300);
-  return geminiRequest(prompt, maxOutputTokens);
-  return groqRequest(prompt, maxOutputTokens);
-  return openaiRequest(prompt, maxOutputTokens);
+import {
+  AuthStorage,
+  createAgentSession,
+  DefaultResourceLoader,
+  getAgentDir,
+  ModelRegistry,
+  SessionManager,
+  SettingsManager,
+} from '@earendil-works/pi-coding-agent';
+
+const authStorage = AuthStorage.create();
+const modelRegistry = ModelRegistry.create(authStorage);
+const sessions = new Map();
+
+const BASE_SYSTEM_PROMPT = `You are taking part in a synthetic Stafford Beer syntegration.
+You will receive only the information your participant would realistically know from sessions they participate in.
+Keep responses concise unless asked otherwise. Follow requested output formats exactly.
+Do not use tools unless explicitly asked.`;
+
+function buildSystemPrompt({systemPrompt, characterBio} = {}) {
+  return [BASE_SYSTEM_PROMPT, characterBio, systemPrompt]
+    .filter(Boolean)
+    .join('\n\n');
 }
 
-function delay(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-async function geminiRequest(prompt, maxOutputTokens) {
-  const body = JSON.stringify({
-    contents: [{parts: [{text: prompt}]}],
-    generationConfig: {
-      maxOutputTokens,
-    },
+async function createPiSession(key, options = {}) {
+  const settingsManager = SettingsManager.inMemory({
+    compaction: { enabled: true },
+    retry: { enabled: true, maxRetries: 5 },
   });
-  const res = await fetchWithRetry(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${process.env.GEMINI_API_KEY}`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json'
-    },
-    body,
+  const loader = new DefaultResourceLoader({
+    cwd: process.cwd(),
+    agentDir: getAgentDir(),
+    settingsManager,
+    noExtensions: true,
+    noSkills: true,
+    noPromptTemplates: true,
+    noContextFiles: true,
+    systemPromptOverride: () => buildSystemPrompt(options),
   });
-  const value = await res.json();
-  const out = value.candidates[0].content.parts[0].text;
-  return out;
-}
+  await loader.reload();
 
-async function openaiRequest(prompt, maxOutputTokens) {
-  let value, out;
-  try {
-    const body = JSON.stringify({
-      "model": "gpt-4.1-nano",
-      "input": [
-        {
-          "role": "system",
-          "content": [
-            {
-              "type": "input_text",
-              "text": prompt,
-            }
-          ]
-        },
-      ],
-      "text": {
-        "format": {
-          "type": "text"
-        }
-      },
-      "reasoning": {},
-      "tools": [],
-      "temperature": 1,
-      "max_output_tokens": maxOutputTokens,
-      "top_p": 1,
-      "store": true
-    });
-    const res = await fetchWithRetry('https://api.openai.com/v1/responses', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body,
-    });
-    value = await res.json();
-    out = value.output[0].content[0].text
-  } catch(error) {
-    console.log(value);
-    throw error;
+  const { session, modelFallbackMessage } = await createAgentSession({
+    cwd: process.cwd(),
+    agentDir: getAgentDir(),
+    authStorage,
+    modelRegistry,
+    resourceLoader: loader,
+    sessionManager: SessionManager.inMemory(process.cwd()),
+    settingsManager,
+    noTools: 'all',
+  });
+
+  if (modelFallbackMessage) {
+    console.warn(`[pi:${key}] ${modelFallbackMessage}`);
   }
-  return out;
-}
 
-async function groqRequest(prompt, maxOutputTokens) {
-  let value, out;
-  try {
-    const body = JSON.stringify({
-      "model": "llama-3.3-70b-versatile",
-      "messages": [{
-        "role": "user",
-        "content": prompt,
-      }],
-      "max_completion_tokens": maxOutputTokens,
-    });
-    const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${process.env.GROQ_API_KEY}`,
-        'Content-Type': 'application/json'
-      },
-      body,
-    });
-    value = await res.json();
-    out = value.choices[0].message.content
-  } catch(error) {
-    console.log(value);
-    throw error;
-  }
-  return out;
-}
-
- async function fetchWithRetry(url, options = {}, retries = 5, delay = 1000) {
-    for (let attempt = 0; attempt < retries; attempt++) {
-        try {
-            const response = await fetch(url, options);
-            return response;
-        } catch (error) {
-            if (error.message.includes('ETIMEDOUT') || error.message.includes('fetch failed')) {
-                if (attempt < retries - 1) {
-                    console.warn(`Retrying fetch (${attempt + 1}/${retries}) after timeout...`);
-                    await new Promise(res => setTimeout(res, delay * Math.pow(2, attempt))); // Exponential backoff
-                } else {
-                    throw new Error(`Fetch failed after ${retries} retries: ${error.message}`);
-                }
-            } else {
-                throw error; // If it's not a timeout error, rethrow it immediately
-            }
-        }
+  const state = { session, buffer: '', unsubscribe: undefined };
+  state.unsubscribe = session.subscribe((event) => {
+    if (event.type === 'message_update' && event.assistantMessageEvent.type === 'text_delta') {
+      state.buffer += event.assistantMessageEvent.delta;
     }
+  });
+  return state;
+}
+
+async function getPiSession(key = 'moderator', options = {}) {
+  if (!sessions.has(key)) {
+    sessions.set(key, createPiSession(key, options));
+  }
+  return sessions.get(key);
+}
+
+export async function request(prompt, maxOutputTokens, options = {}) {
+  const key = options.sessionKey || 'moderator';
+  const state = await getPiSession(key, options);
+  state.buffer = '';
+
+  void maxOutputTokens;
+
+  await state.session.prompt(prompt, {
+    expandPromptTemplates: false,
+  });
+
+  return state.buffer.trim();
+}
+
+export async function disposeSessions() {
+  for (const statePromise of sessions.values()) {
+    const state = await statePromise;
+    state.unsubscribe?.();
+    state.session.dispose();
+  }
+  sessions.clear();
 }
